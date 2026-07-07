@@ -21,13 +21,16 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.preprocessing import LabelEncoder
 
 sns.set_style('whitegrid')
 sns.set_palette('mako')
 
 # ── 1. Load Data ───────────────────────────────────────────
+import os
+os.makedirs('output', exist_ok=True)
+
 patients = pd.read_csv('data/patients.csv')
 providers = pd.read_csv('data/providers.csv')
 claims = pd.read_csv('data/claims.csv')
@@ -131,7 +134,6 @@ print(admit_by_age[['admit_rate_pct', 'avg_los', 'claim_count']].to_string())
 print()
 
 # Readmissions
-readmit = claims[claims['admitted'] == 1].groupby('patient_id').filter(lambda x: len(x) >= 2)
 readmit_counts = claims[claims['admitted'] == 1].groupby('patient_id').size()
 readmitted_patients = (readmit_counts >= 2).sum()
 total_admitted_patients = claims[claims['admitted'] == 1]['patient_id'].nunique()
@@ -189,7 +191,7 @@ ax1.set_xticklabels(monthly['month'].values, rotation=45, ha='right')
 ax2 = ax1.twinx()
 ax2.plot(range(len(monthly)), monthly['admissions'], 's-', color='#e34a33', linewidth=2, markersize=6, alpha=0.7)
 ax2.set_ylabel('Admissions', color='#e34a33')
-ax2.set_title('Monthly Healthcare Cost & Admission Trend (2024)', fontweight='bold', fontsize=13)
+ax1.set_title('Monthly Healthcare Cost & Admission Trend (2024)', fontweight='bold', fontsize=13)
 
 plt.tight_layout()
 plt.savefig('output/monthly_trend.png', dpi=150, bbox_inches='tight')
@@ -278,7 +280,18 @@ features.extend(['region_enc', 'dx_enc'])
 X = df[features]
 y = df['admitted']
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+# Split by patient_id to prevent data leakage — the same patient's claims
+# must not appear in both train and test sets
+patient_ids = df['patient_id'].unique()
+train_pids, test_pids = train_test_split(patient_ids, test_size=0.25, random_state=42)
+
+train_mask = df['patient_id'].isin(train_pids)
+test_mask = df['patient_id'].isin(test_pids)
+
+X_train = X[train_mask]
+X_test = X[test_mask]
+y_train = y[train_mask]
+y_test = y[test_mask]
 
 rf = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42)
 rf.fit(X_train, y_train)
