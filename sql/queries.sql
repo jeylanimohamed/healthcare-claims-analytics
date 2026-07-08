@@ -85,7 +85,8 @@ GROUP BY risk_category
 ORDER BY AVG(p.risk_score) DESC;
 
 -- ============================
--- 6. Readmission Analysis (patients with 2+ admissions in 2024)
+-- 6. Repeat-admission proxy (patients with 2+ admission-associated claims
+--    in the generated year). NOTE: not a 30-day or CMS readmission measure.
 -- ============================
 SELECT
     c.patient_id,

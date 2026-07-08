@@ -1,15 +1,21 @@
 """
 Healthcare Claims Analytics — Main Analysis
 =============================================
-Portfolio project: analyses 25,000 synthetic Medicare-style claims
-across 5,000 patients and 200 providers.
+Portfolio project on fully synthetic healthcare claims-style data:
+25,000 generated claims across 5,000 generated patients and 200 providers.
+No real, employer, CMS, or patient data are used.
+
+The generator encodes relationships between age, risk score, cost and
+admission, so the model and summaries recover known, generated structure.
+Results demonstrate the analytics pipeline, not real clinical or financial
+patterns.
 
 Sections:
   1. Data loading + SQL queries via SQLite
-  2. Cost analysis by diagnosis, region, and risk tier
-  3. Admission & readmission patterns
-  4. Visualisation: cost trends, risk heatmaps, regional comparisons
-  5. Predictive model: admission risk classifier
+  2. Cost and utilisation summaries by diagnosis, region, and risk tier
+  3. Admission and repeat-admission (proxy) patterns
+  4. Visualisation: cost trends, risk summaries, regional comparisons
+  5. Admission-classification model on generated labels (RF + LR baseline)
 """
 
 import sqlite3
@@ -133,12 +139,14 @@ print("\nAdmission rate by age group:")
 print(admit_by_age[['admit_rate_pct', 'avg_los', 'claim_count']].to_string())
 print()
 
-# Readmissions
+# Repeat-admission proxy (NOT a clinical/CMS or 30-day readmission measure):
+# share of admitted patients with >=2 admission-associated claims in the year.
 readmit_counts = claims[claims['admitted'] == 1].groupby('patient_id').size()
 readmitted_patients = (readmit_counts >= 2).sum()
 total_admitted_patients = claims[claims['admitted'] == 1]['patient_id'].nunique()
-print(f"Patients with ≥2 admissions: {readmitted_patients} "
-      f"({readmitted_patients/total_admitted_patients*100:.1f}% of admitted patients)")
+print(f"Repeat-admission proxy: {readmitted_patients} patients "
+      f"({readmitted_patients/total_admitted_patients*100:.1f}% of admitted patients) "
+      f"had >=2 admission-associated claims in the generated year")
 print()
 
 # ── 4. Visualisations ─────────────────────────────────────
@@ -261,9 +269,9 @@ plt.savefig('output/regional_comparison.png', dpi=150, bbox_inches='tight')
 plt.close()
 print("  ✓ output/regional_comparison.png")
 
-# ── 5. Predictive Model ───────────────────────────────────
+# ── 5. Admission classification model ─────────────────────
 print("\n" + "=" * 60)
-print("PREDICTIVE MODEL: Admission Risk Classifier")
+print("ADMISSION CLASSIFICATION MODEL (generated labels; synthetic data)")
 print("=" * 60)
 
 # Feature engineering
@@ -308,6 +316,16 @@ print(f"ROC-AUC: {roc_auc_score(y_test, y_prob):.3f}")
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred, target_names=['Not Admitted', 'Admitted']))
 
+# Logistic-regression baseline (scaled) for a simple, interpretable comparison.
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+_scaler = StandardScaler().fit(X_train)
+_lr = LogisticRegression(max_iter=1000).fit(_scaler.transform(X_train), y_train)
+_lr_prob = _lr.predict_proba(_scaler.transform(X_test))[:, 1]
+print(f"Baseline LogisticRegression ROC-AUC: {roc_auc_score(y_test, _lr_prob):.3f}")
+print("(Both models are trained and evaluated on labels generated from known")
+print(" rules, so performance reflects recovery of encoded structure.)")
+
 # Feature importance
 importance = pd.DataFrame({
     'feature': features,
@@ -321,7 +339,7 @@ for _, row in importance.iterrows():
 # Feature importance chart
 fig, ax = plt.subplots(figsize=(8, 4))
 bars = ax.barh(importance['feature'], importance['importance'], color=sns.color_palette('mako', len(features)))
-ax.set_title('Feature Importance — Admission Risk Prediction', fontweight='bold')
+ax.set_title('Feature Importance — Admission Classification (synthetic, generated labels)', fontweight='bold')
 ax.set_xlabel('Importance')
 for bar, val in zip(bars, importance['importance']):
     ax.text(bar.get_width() + 0.002, bar.get_y() + bar.get_height()/2, f'{val:.3f}', va='center', fontsize=9)
@@ -335,13 +353,19 @@ print("\n" + "=" * 60)
 print("ANALYSIS COMPLETE")
 print("=" * 60)
 print(f"""
-Key Findings:
-  1. Total claims cost: ${total_cost:,.0f}
-  2. {admit_rate:.1f}% of claims result in hospital admission
-  3. High-risk patients cost {cost_by_risk.loc['High (2.5-3.5)', 'cost_per_patient']:,.0f}/patient
-     vs {cost_by_risk.loc['Low (<1.5)', 'cost_per_patient']:,.0f}/patient for low-risk
-  4. Readmission rate: {readmitted_patients/total_admitted_patients*100:.1f}% of admitted patients
-  5. Model predicts admission risk with ROC-AUC: {roc_auc_score(y_test, y_prob):.3f}
+All values below are outputs of the synthetic sample. Several relationships
+(age, risk, cost, admission) are encoded in the generator, so these figures
+demonstrate the pipeline rather than real clinical or financial patterns.
+
+  1. Total generated claims cost: ${total_cost:,.0f}
+  2. {admit_rate:.1f}% of generated claims carry an admission flag
+  3. High-risk patients: {cost_by_risk.loc['High (2.5-3.5)', 'cost_per_patient']:,.0f}/patient
+     vs {cost_by_risk.loc['Low (<1.5)', 'cost_per_patient']:,.0f}/patient for low-risk (encoded relationship)
+  4. Repeat-admission proxy: {readmitted_patients/total_admitted_patients*100:.1f}% of admitted patients had
+     >=2 admission-associated claims in the generated year (not a 30-day or CMS measure)
+  5. Admission-classification ROC-AUC on the synthetic held-out test set: {roc_auc_score(y_test, y_prob):.3f}
+     (patient-level split; label generated from age and risk, so this reflects
+     recovery of encoded structure, not clinical prediction)
 
 Files generated:
   - output/diagnosis_cost_analysis.png

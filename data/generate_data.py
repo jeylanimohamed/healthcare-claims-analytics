@@ -1,10 +1,14 @@
 """
 Synthetic Healthcare Claims Data Generator
-Generates realistic Medicare-style claims data for analytics portfolio project.
+Generates synthetic healthcare claims-style data for an analytics portfolio
+project, using common healthcare fields. The data are illustrative only: the
+diagnosis/procedure combinations and clinical relationships are generated for
+demonstration and are not calibrated to or validated against any real CMS
+file, Medicare population, or coding distribution.
 
-Schema mirrors real CMS patterns:
+Fields used (synthetic):
 - Claims: procedure codes, diagnosis codes, costs, dates
-- Patients: demographics, chronic conditions, risk scores
+- Patients: demographics, chronic conditions, a generated risk score
 - Providers: specialty, region, patient panel size
 """
 
